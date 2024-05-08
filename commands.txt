@@ -1,0 +1,32 @@
+# start postgres console - to run SQL scripts
+docker exec -it postgres psql -U postgres
+
+# list all SQL tables
+\d
+
+
+# verify that job has run
+docker exec postgres psql -U postgres -c 'select * from BATCH_JOB_EXECUTION;'
+
+# build 
+./mvnw package -Dmaven.test.skip=true
+
+# run batch job
+java -jar target/billing-job-0.0.1-SNAPSHOT.jar input.file=src/main/resources/billing-2023-01.csv
+
+# check job instance in database
+docker exec postgres psql -U postgres -c 'select * from BATCH_JOB_INSTANCE;'
+
+docker exec postgres psql -U postgres -c 'select * from BATCH_JOB_EXECUTION;'
+
+# check job execution parameters
+docker exec postgres psql -U postgres -c 'select * from BATCH_JOB_EXECUTION_PARAMS;'
+
+# count job executions 
+docker exec postgres psql -U postgres -c 'select count(*) from BATCH_JOB_EXECUTION;'
+
+# run another batch job - different input.file
+java -jar target/billing-job-0.0.1-SNAPSHOT.jar input.file=src/main/resources/billing-2023-02.csv
+
+
+ docker exec batch-sample-postgres-1 psql -U postgres -c 'select * from BATCH_JOB_EXECUTION_PARAMS;'
