@@ -5,3 +5,4 @@ set -e
 
 docker exec batch-sample-postgres-1 psql -f /mnt/exercises/src/sql/schema-drop-postgresql.sql -U postgres
 docker exec batch-sample-postgres-1 psql -f /mnt/exercises/src/sql/schema-postgresql.sql -U postgres
+docker exec batch-sample-postgres-1 psql -f /mnt/exercises/src/sql/schema-billing.sql -U postgres

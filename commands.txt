@@ -30,3 +30,20 @@ java -jar target/billing-job-0.0.1-SNAPSHOT.jar input.file=src/main/resources/bi
 
 
  docker exec batch-sample-postgres-1 psql -U postgres -c 'select * from BATCH_JOB_EXECUTION_PARAMS;'
+
+# build the job
+ ./mvnw clean package -Dmaven.test.skip=true
+
+# run the job
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=src/main/resources/billing_2023_01.csv
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=src/main/resources/billing_2023_02.csv
+
+# check step execution on database
+ docker exec batch-sample-postgres-1 psql -U postgres -c 'select * from BATCH_STEP_EXECUTION;'
+
+./mvnw clean test -Dspring.batch.job.enabled=false
+
+docker exec batch-sample-postgres-1 psql -U postgres -c 'select count(*) from BILLING_DATA;'
+
+
+docker exec batch-sample-postgres-1 psql -U postgres -c 'select count(*) from BILLING_DATA;'
