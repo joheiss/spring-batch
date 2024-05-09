@@ -1,0 +1,22 @@
+{"properties": [
+  {
+    "name": "spring.batchsample.pricing.data",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.batchsample.pricing.data'"
+  },
+  {
+    "name": "spring.batchsample.pricing.call",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.batchsample.pricing.call'"
+  },
+  {
+    "name": "spring.batchsample.pricing.sms",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.batchsample.pricing.sms'"
+  },
+  {
+    "name": "spring.batchsample.spending.threshold",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.batchsample.spending.threshold'"
+  }
+]}

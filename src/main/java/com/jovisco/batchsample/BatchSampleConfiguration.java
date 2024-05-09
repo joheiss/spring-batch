@@ -2,39 +2,55 @@ package com.jovisco.batchsample;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.job.DefaultJobParametersValidator;
+import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.core.job.CompositeJobParametersValidator;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
+import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
+import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
+import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.DataClassRowMapper;
 import org.springframework.jdbc.support.JdbcTransactionManager;
+
+import java.util.Arrays;
 
 import javax.sql.DataSource;
 @Configuration
 public class BatchSampleConfiguration {
 
 @Bean
-  public Job job(JobRepository jobRepository, Step step1, Step step2) {
-    // return new BatchSampleJob(jobRepository);
+public CompositeJobParametersValidator validator() {
+    var validator = new CompositeJobParametersValidator();
+    validator.setValidators(Arrays.asList(new ParameterValidator()));
+    return validator;
+}
 
-    // prepare validator
-    String[] requiredParameters = { "input.file" };
-    String[] optionalParameters = { "file.format" };
-    var defaultJobParametersValidator = new DefaultJobParametersValidator(requiredParameters, optionalParameters);
-    defaultJobParametersValidator.afterPropertiesSet();
+@Bean
+  public Job job(
+    JobRepository jobRepository, 
+    Step step1, 
+    Step step2, 
+    Step step3) {
 
     return new JobBuilder("SampleBatchJob", jobRepository)
-        // .validator(defaultJobParametersValidator)
+        .validator(validator())
         .start(step1)
         .next(step2)
+        .next(step3)
         .build();
   }
 
@@ -46,10 +62,13 @@ public class BatchSampleConfiguration {
   }
 
   @Bean
-  public FlatFileItemReader<BillingData> billinDataFileReader() {
+  @StepScope
+  public FlatFileItemReader<BillingData> billingDataFileReader(
+    @Value("#{jobParameters['input.file']}") String inputFile
+  ) {
     return new FlatFileItemReaderBuilder<BillingData>()
       .name("billingDataFileReader")
-      .resource(new FileSystemResource("staging/billing_2023_01.csv"))
+      .resource(new FileSystemResource(inputFile))
       .delimited()
       .names("dataYear", "dataMonth", "accountId", "phoneNumber", "dataUsage", "callDuration", "smsCount")
       .targetType(BillingData.class)
@@ -73,12 +92,98 @@ public class BatchSampleConfiguration {
     JobRepository jobRepository, 
     JdbcTransactionManager transactionManager, 
     ItemReader<BillingData> billingDataFileReader,
-    ItemWriter<BillingData> billingDataTableWriter
+    ItemWriter<BillingData> billingDataTableWriter,
+    BillingDataSkipListener skipListener
   ) {
     return new StepBuilder("fileIngestion", jobRepository)
       .<BillingData, BillingData>chunk(100, transactionManager)
       .reader(billingDataFileReader)
       .writer(billingDataTableWriter)
+      .faultTolerant()
+      .skip(FlatFileParseException.class)
+      .skipLimit(10)
+      .listener(skipListener)
       .build();
   }
+
+  @Bean
+  @StepScope
+  public JdbcCursorItemReader<BillingData> billingDataTableReader(
+    DataSource dataSource,
+    @Value("#{jobParameters['data.year']}") Integer year,
+    @Value("#{jobParameters['data.month']}") Integer month
+  ) {
+
+    var sql = String.format(
+      "select * from BILLING_DATA where DATA_YEAR = %d and DATA_MONTH = %d", 
+      year, month
+    );
+
+    return new JdbcCursorItemReaderBuilder<BillingData>()
+      .name("billingDataTableReader")
+      .dataSource(dataSource)
+      .sql(sql)
+      .rowMapper(new DataClassRowMapper<>(BillingData.class))
+      .build();
+  }
+
+  @Bean
+  public BillingDataProcessor billingDataProcessor(PricingService pricingService) {
+    return new BillingDataProcessor(pricingService);
+  }
+
+  @Bean
+  @StepScope
+  public FlatFileItemWriter<ReportingData> billingDataFileWriter(
+    @Value("#{jobParameters['output.file']}") String outputFile
+  ) {
+
+    return new FlatFileItemWriterBuilder<ReportingData>()
+      .resource(new FileSystemResource(outputFile))
+      .name("billingDataFileWriter")
+      .delimited()
+      .names("billingData.dataYear", "billingData.dataMonth", "billingData.accountId",
+        "billingData.phoneNumber", "billingData.dataUsage", "billingData.callDuration", 
+        "billingData.smsCount", "billingTotal")
+      .build();
+  }
+
+  @Bean
+  public Step step3(
+    JobRepository jobRepository, 
+    JdbcTransactionManager transactionManager,
+    ItemReader<BillingData> billingDataTableReader,
+    ItemProcessor<BillingData, ReportingData> billingDataProcessor,
+    ItemWriter<ReportingData> billingDataFileWriter,
+    BillingDataRetryListener retryListener
+    ) {
+        return new StepBuilder("reportGeneration", jobRepository)
+          .<BillingData, ReportingData>chunk(100, transactionManager)
+          .reader(billingDataTableReader)
+          .processor(billingDataProcessor)
+          .writer(billingDataFileWriter)
+          .faultTolerant()
+          .retry(PricingException.class)
+          .retryLimit(100)
+          .listener(retryListener)
+          .build();
+  }
+
+  @Bean
+  @StepScope
+  public BillingDataSkipListener skipListener(
+    @Value("#{jobParameters['skip.file']}") String skippedFile
+  ) {
+    return new BillingDataSkipListener(skippedFile);
+  }
+
+  @Bean
+  public PricingService pricingService() {
+    return new PricingService();
+  }
+
+  @Bean
+  public BillingDataRetryListener retryListener() {
+    return new BillingDataRetryListener();
+  }  
 }

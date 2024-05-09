@@ -45,8 +45,14 @@ class BatchSampleApplicationTests {
 	@Test
 	void testJobExecution(CapturedOutput output) throws Exception {
 		// given
+
 		var jobParameters = new JobParametersBuilder()
-			.addString("input.file", "src/main/resources/billing_2023_01.csv")
+			.addString("input.file", "input/billing-2023-01.csv")
+			.addString("output.file", "staging/billing-report-2023-01.csv")
+			.addString("data.year", "2023")
+			.addString("data.month", "1")
+			// .addJobParameter("data.year", 2023, Integer.class)
+			// .addJobParameter("data.month", 1, Integer.class)
 			.addString("file.format", "csv", false)
 			.toJobParameters();
 
@@ -55,7 +61,12 @@ class BatchSampleApplicationTests {
 
 		// then 
 		assertEquals(ExitStatus.COMPLETED, jobExecution.getExitStatus());
-		assertTrue(Files.exists(Paths.get("staging", "billing_2023_01.csv")));
+		assertTrue(Files.exists(Paths.get("staging", "billing-2023-01.csv")));
 		assertEquals(1000, JdbcTestUtils.countRowsInTable(jdbcTemplate, "BILLING_DATA"));
+
+		// ... output file exists & number of lines = 938 (with customized pricing / threshold 
+		var billingReport = Paths.get("staging", "billing-report-2023-01.csv");
+		assertTrue(Files.exists(billingReport));
+		assertEquals(938, Files.lines(billingReport).count());
 	}
 }

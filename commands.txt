@@ -47,3 +47,17 @@ docker exec batch-sample-postgres-1 psql -U postgres -c 'select count(*) from BI
 
 
 docker exec batch-sample-postgres-1 psql -U postgres -c 'select count(*) from BILLING_DATA;'
+
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=input/billing-2023-01.csv output.file=staging/billing-report-2023-01.csv data.year=2023 data.month=1
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=input/billing-2023-02.csv output.file=staging/billing-report-2023-02.csv data.year=2023 data.month=2
+
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=input/billing-2023-03.csv output.file=staging/billing-report-2023-03.csv data.year=2023 data.month=3
+
+docker exec batch-sample-postgres-1 psql -U postgres -c 'select job_instance_id, job_execution_id, status from BATCH_JOB_EXECUTION;'
+docker exec batch-sample-postgres-1 psql -U postgres -c 'select step_execution_id, job_execution_id, step_name, status, read_count, write_count, commit_count, rollback_count  from BATCH_STEP_EXECUTION;'
+
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=input/billing-2023-03.csv output.file=staging/billing-report-2023-03.csv skip.file=staging/billing-data-skip-2023-03.csv data.year=2023 data.month=3
+
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=input/billing-2023-04.csv output.file=staging/billing-report-2023-04.csv skip.file=staging/billing-data-skip-2023-04.csv data.year=2023 data.month=4
+
+java -jar target/batch-sample-0.0.1-SNAPSHOT.jar input.file=input/billing-2023-05.csv output.file=staging/billing-report-2023-05.csv skip.file=staging/billing-data-skip-2023-05.csv data.year=2023 data.month=5
